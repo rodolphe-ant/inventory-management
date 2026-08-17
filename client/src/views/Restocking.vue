@@ -34,13 +34,20 @@
           <span class="budget-value">{{ money(budgetAmount) }}</span>
         </div>
         <div class="budget-controls">
+          <!--
+            Keyed on currency so the slider re-mounts when the locale switches. On an
+            in-place patch v-model writes `value` before `max`/`step` are updated, so the
+            browser clamps the new (e.g. yen) value to the old (dollar) max and the thumb
+            ends up out of sync with budgetInput. A fresh mount applies value after bounds.
+          -->
           <input
+            :key="currentCurrency"
             type="range"
             class="budget-slider"
             :min="0"
             :max="sliderMax"
             :step="sliderStep"
-            v-model.number="budget"
+            v-model.number="budgetInput"
             @input="onBudgetInput"
           >
           <input
@@ -49,7 +56,7 @@
             :min="0"
             :max="sliderMax"
             :step="sliderStep"
-            v-model.number="budget"
+            v-model.number="budgetInput"
           >
         </div>
         <p class="help-text">{{ t('restocking.budgetHelp') }}</p>
@@ -151,7 +158,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { api } from '../api'
 import { useFilters } from '../composables/useFilters'
 import { useI18n } from '../composables/useI18n'
-import { formatCurrency, formatCurrencyWithDecimals } from '../utils/currency'
+import { formatCurrency, formatCurrencyWithDecimals, convertAmount, convertToUSD } from '../utils/currency'
 
 export default {
   name: 'Restocking',
@@ -167,7 +174,9 @@ export default {
     const error = ref(null)
     const candidates = ref([])
 
-    const budget = ref(0)
+    // Bound to the slider/number inputs in the *display* currency (yen in ja,
+    // dollars in en) so what the user types matches what the stat cards show.
+    const budgetInput = ref(0)
     // Only auto-set the budget the first time candidates load; afterwards the user
     // owns the value and it should persist across filter changes (just clamped below).
     const budgetInitialized = ref(false)
@@ -180,19 +189,40 @@ export default {
     const submitError = ref(null)
     const lastOrder = ref(null)
 
-    // `budget` is bound to the inputs with v-model.number, which yields '' (or a partial
-    // string like '-') while the number box is being edited. All maths and display go
-    // through this normalised value so a half-typed budget behaves as 0 instead of NaN.
-    const budgetAmount = computed(() => {
-      const n = Number(budget.value)
+    // `budgetInput` is bound to the inputs with v-model.number, which yields '' (or a
+    // partial string like '-') while the number box is being edited. This normalised
+    // value (still in display currency) is what everything else reads so a half-typed
+    // budget behaves as 0 instead of NaN.
+    const budgetInputAmount = computed(() => {
+      const n = Number(budgetInput.value)
       return Number.isFinite(n) && n > 0 ? n : 0
     })
 
+    // The backend (and all selection maths below) only understands USD, regardless of
+    // what currency is being displayed, so every input value is normalised back to USD
+    // here before it's used for anything other than rendering the inputs themselves.
+    const budgetAmount = computed(() => convertToUSD(budgetInputAmount.value, currentCurrency.value))
+
     const totalNeed = computed(() => candidates.value.reduce((sum, c) => sum + c.restock_cost, 0))
+    // Display-currency version of the total need, used only to size the slider/step -
+    // the actual budget maths above stays in USD.
+    const totalNeedDisplay = computed(() => convertAmount(totalNeed.value, currentCurrency.value))
 
-    const sliderMax = computed(() => Math.max(1000, Math.ceil(totalNeed.value / 1000) * 1000))
+    // Round the ceiling up to a "nice" round number in the display currency. A JPY
+    // total is ~150x the USD one, so flooring/step-rounding to the same 1,000/10 would
+    // look arbitrarily coarse in USD or arbitrarily fine in JPY. Using "$1,000 worth"
+    // in the display currency (via convertAmount, which owns the exchange rate) keeps
+    // the granularity equivalent in either currency without duplicating the rate here.
+    const roundingUnit = computed(() => convertAmount(1000, currentCurrency.value))
+    const sliderMax = computed(() => {
+      const unit = roundingUnit.value
+      return Math.max(unit, Math.ceil(totalNeedDisplay.value / unit) * unit)
+    })
 
-    const sliderStep = computed(() => Math.max(10, Math.round(sliderMax.value / 200 / 10) * 10))
+    const sliderStep = computed(() => {
+      const unit = roundingUnit.value / 100
+      return Math.max(unit, Math.round(sliderMax.value / 200 / unit) * unit)
+    })
 
     // Greedy pass over server-provided (urgency-sorted) candidates: keep taking
     // items while the budget allows. If an item doesn't fit we skip it (not break)
@@ -234,6 +264,7 @@ export default {
 
     // Default budget on first load: a quarter of the total restocking need, rounded
     // to a tidy number, so the page opens with a meaningful partial recommendation.
+    // Operates on display-currency figures, same as sliderMax/budgetInput.
     const round25pct = (max) => Math.round((max * 0.25) / 10) * 10
 
     const loadCandidates = async () => {
@@ -246,12 +277,13 @@ export default {
         overrides.value = {}
 
         if (!budgetInitialized.value) {
-          budget.value = round25pct(sliderMax.value)
+          budgetInput.value = round25pct(sliderMax.value)
           budgetInitialized.value = true
         } else {
           // Keep the user's chosen budget across filter changes, just clamp it
-          // so it never exceeds the (possibly smaller) new slider range.
-          budget.value = Math.min(budgetAmount.value, sliderMax.value)
+          // so it never exceeds the (possibly smaller) new slider range. Both
+          // sides are in display currency here.
+          budgetInput.value = Math.min(budgetInputAmount.value, sliderMax.value)
         }
       } catch (err) {
         error.value = 'Failed to load restock candidates: ' + err.message
@@ -262,6 +294,15 @@ export default {
 
     watch([selectedLocation, selectedCategory], () => {
       loadCandidates()
+    })
+
+    // If the locale (and thus display currency) changes, convert the current input so
+    // the underlying USD budget - and therefore the greedy selection - is unaffected by
+    // the currency switch (modulo rounding to a whole display unit). Guarded so this
+    // doesn't fire before the initial candidates load has set a real budget.
+    watch(currentCurrency, (next, prev) => {
+      if (!budgetInitialized.value) return
+      budgetInput.value = Math.round(convertAmount(convertToUSD(budgetInputAmount.value, prev), next))
     })
 
     const toggle = (c) => {
@@ -322,12 +363,13 @@ export default {
 
     return {
       t,
+      currentCurrency,
       money,
       unitMoney,
       loading,
       error,
       candidates,
-      budget,
+      budgetInput,
       budgetAmount,
       sliderMax,
       sliderStep,

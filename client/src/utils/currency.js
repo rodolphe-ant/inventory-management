@@ -26,3 +26,13 @@ export function convertAmount(amount, currency = 'USD') {
   }
   return amount
 }
+
+// Inverse of convertAmount: display-currency amount -> USD. Callers that need
+// a whole-unit result (e.g. a budget input) round themselves, since some
+// callers want to preserve fractional USD while an amount is still being edited.
+export function convertToUSD(amount, currency = 'USD') {
+  if (currency === 'JPY') {
+    return amount / USD_TO_JPY
+  }
+  return amount
+}
