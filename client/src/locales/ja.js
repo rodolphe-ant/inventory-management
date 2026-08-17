@@ -6,6 +6,7 @@ export default {
     orders: '注文',
     finance: '財務',
     demandForecast: '需要予測',
+    restocking: '補充発注',
     companyName: '触媒コンポーネンツ',
     subtitle: '在庫管理システム'
   },
@@ -106,6 +107,9 @@ export default {
     title: '注文',
     description: '顧客注文の表示と管理',
     allOrders: 'すべての注文',
+    submittedOrders: '送信済み補充発注',
+    submittedDescription: '補充発注タブから作成された入荷発注。フィルターの影響を受けません。',
+    leadTimeDays: '{days}日',
     totalOrders: '総注文数',
     totalRevenue: '総収益',
     avgOrderValue: '平均注文額',
@@ -125,7 +129,10 @@ export default {
       totalValue: '合計金額',
       status: 'ステータス',
       expectedDelivery: '予定配達日',
-      actualDelivery: '実際の配達日'
+      actualDelivery: '実際の配達日',
+      submittedAt: '送信日',
+      leadTime: 'リードタイム',
+      totalCost: '合計コスト'
     }
   },
 
@@ -188,6 +195,43 @@ export default {
     }
   },
 
+  // Restocking
+  restocking: {
+    title: '補充発注',
+    description: '予算を設定し、需要予測から補充発注を作成します',
+    budget: '利用可能予算',
+    budgetHelp: 'スライダーをドラッグするか金額を入力してください。予算内で緊急度の高い順に品目を推奨します。',
+    allocated: '割当額',
+    remaining: '残額',
+    itemsSelected: '選択品目数',
+    recommendations: '補充推奨',
+    recommendationHint: '推奨数量は30日間の予測需要と発注点をカバーします。',
+    manualChanges: '手動変更 {count}件',
+    resetSelection: '推奨に戻す',
+    noCandidates: '現在のフィルターでは補充が必要な品目はありません。',
+    overBudget: '選択が予算を超えています。品目を外すか予算を増やしてください。',
+    nothingSelected: '発注するには品目を1つ以上選択してください。',
+    placeOrder: '発注する',
+    placing: '発注中...',
+    orderPlaced: '発注 {orderNumber} を送信しました',
+    orderPlacedDetail: '{count}品目、合計 {total}。予定配達日 {date}（リードタイム {days}日）。',
+    viewOrders: '注文で表示',
+    days: '{count}日',
+    table: {
+      include: '選択',
+      sku: 'SKU',
+      itemName: '品目名',
+      warehouse: '倉庫',
+      trend: 'トレンド',
+      onHand: '在庫数',
+      forecast: '予測',
+      quantity: '補充数量',
+      unitCost: '単価',
+      lineCost: '小計',
+      leadTime: 'リードタイム'
+    }
+  },
+
   // Filters
   filters: {
     timePeriod: '期間',
@@ -204,6 +248,7 @@ export default {
     shipped: '出荷済み',
     processing: '処理中',
     backordered: 'バックオーダー',
+    submitted: '送信済み',
     inStock: '在庫あり',
     lowStock: '在庫僅少',
     adequate: '適量'
@@ -359,7 +404,15 @@ export default {
     '48V DC Power Supply Unit': '48V DC電源ユニット',
     'USB-C PD 100W Power Supply': 'USB-C PD 100W電源',
     'Battery Backup Power Supply': 'バッテリバックアップ電源',
-    'Adjustable Bench Power Supply': '可変ベンチ電源'
+    'Adjustable Bench Power Supply': '可変ベンチ電源',
+    'Industrial Widget Type A': '産業用ウィジェット タイプA',
+    'Steel Bearing Assembly': 'スチールベアリングアセンブリ',
+    'High-Temperature Gasket': '高温ガスケット',
+    'Electric Motor 5HP': '電動モーター 5HP',
+    'Oil Filter Cartridge': 'オイルフィルターカートリッジ',
+    'Pressure Relief Valve': '圧力リリーフバルブ',
+    'Temperature Sensor Module': '温度センサーモジュール',
+    'Logic Controller Board': 'ロジックコントローラ基板'
   },
 
   // Customer Names

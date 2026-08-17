@@ -27,6 +27,56 @@
         </div>
       </div>
 
+      <div v-if="restockOrders.length > 0" class="card restock-card">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title">{{ t('orders.submittedOrders') }} ({{ restockOrders.length }})</h3>
+            <p class="card-subtitle">{{ t('orders.submittedDescription') }}</p>
+          </div>
+        </div>
+        <div class="table-container">
+          <table class="orders-table restock-orders-table">
+            <thead>
+              <tr>
+                <th class="col-order-number">{{ t('orders.table.orderNumber') }}</th>
+                <th class="col-items">{{ t('orders.table.items') }}</th>
+                <th class="col-status">{{ t('orders.table.status') }}</th>
+                <th class="col-date">{{ t('orders.table.submittedAt') }}</th>
+                <th class="col-lead">{{ t('orders.table.leadTime') }}</th>
+                <th class="col-date">{{ t('orders.table.expectedDelivery') }}</th>
+                <th class="col-value">{{ t('orders.table.totalCost') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in restockOrders" :key="order.id">
+                <td class="col-order-number"><strong>{{ order.order_number }}</strong></td>
+                <td class="col-items">
+                  <details class="items-details">
+                    <summary class="items-summary">
+                      {{ t('orders.itemsCount', { count: order.items.length }) }}
+                    </summary>
+                    <div class="items-dropdown">
+                      <div v-for="item in order.items" :key="item.sku" class="item-entry">
+                        <span class="item-name">{{ translateProductName(item.name) }}</span>
+                        <span class="item-meta">{{ t('orders.quantity') }}: {{ item.quantity }} @ {{ currencySymbol }}{{ item.unit_cost.toFixed(2) }}</span>
+                        <span class="item-meta">{{ translateWarehouse(item.warehouse) }} · {{ t('orders.leadTimeDays', { days: item.lead_time_days }) }}</span>
+                      </div>
+                    </div>
+                  </details>
+                </td>
+                <td class="col-status">
+                  <span class="badge info">{{ t('status.submitted') }}</span>
+                </td>
+                <td class="col-date">{{ formatDate(order.submitted_at) }}</td>
+                <td class="col-lead"><strong>{{ t('orders.leadTimeDays', { days: order.lead_time_days }) }}</strong></td>
+                <td class="col-date">{{ formatDate(order.expected_delivery) }}</td>
+                <td class="col-value"><strong>{{ currencySymbol }}{{ order.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">{{ t('orders.allOrders') }} ({{ orders.length }})</h3>
@@ -87,7 +137,7 @@ import { useI18n } from '../composables/useI18n'
 export default {
   name: 'Orders',
   setup() {
-    const { t, currentCurrency, translateProductName, translateCustomerName } = useI18n()
+    const { t, currentCurrency, translateProductName, translateCustomerName, translateWarehouse } = useI18n()
 
     const currencySymbol = computed(() => {
       return currentCurrency.value === 'JPY' ? '¥' : '$'
@@ -95,6 +145,7 @@ export default {
     const loading = ref(true)
     const error = ref(null)
     const orders = ref([])
+    const restockOrders = ref([])
 
     // Use shared filters
     const {
@@ -129,6 +180,18 @@ export default {
       loadOrders()
     })
 
+    // Restock orders are not affected by the global filters (warehouse/category/status/period),
+    // so they are loaded once on mount rather than inside loadOrders or the filter watch above.
+    const loadRestockOrders = async () => {
+      try {
+        restockOrders.value = await api.getRestockOrders()
+      } catch (err) {
+        // Supplementary section: a failure here must not surface the page-level error
+        // or blank out the customer orders table.
+        console.error('Failed to load restock orders:', err)
+      }
+    }
+
     const getOrdersByStatus = (status) => {
       return orders.value.filter(order => order.status === status)
     }
@@ -146,26 +209,35 @@ export default {
     const formatDate = (dateString) => {
       const { currentLocale } = useI18n()
       const locale = currentLocale.value === 'ja' ? 'ja-JP' : 'en-US'
-      return new Date(dateString).toLocaleDateString(locale, {
+      const date = new Date(dateString)
+      // Guard against missing/malformed timestamps so the cell shows the raw value
+      // rather than "Invalid Date".
+      if (isNaN(date.getTime())) return dateString || ''
+      return date.toLocaleDateString(locale, {
         year: 'numeric',
         month: 'short',
         day: 'numeric'
       })
     }
 
-    onMounted(loadOrders)
+    onMounted(() => {
+      loadOrders()
+      loadRestockOrders()
+    })
 
     return {
       t,
       loading,
       error,
       orders,
+      restockOrders,
       getOrdersByStatus,
       getOrderStatusClass,
       formatDate,
       currencySymbol,
       translateProductName,
-      translateCustomerName
+      translateCustomerName,
+      translateWarehouse
     }
   }
 }
@@ -201,6 +273,34 @@ export default {
 
 .col-value {
   width: 120px;
+}
+
+.col-lead {
+  width: 110px;
+}
+
+/* The shared items dropdown is absolutely positioned and relies on rows below it for
+   room. The restock table often has a single row inside an overflow-x container, which
+   clips the popover, so here it expands inline and grows the row instead. */
+.restock-orders-table .items-dropdown {
+  position: static;
+  margin-top: 0.5rem;
+  box-shadow: none;
+  min-width: 0;
+  max-width: none;
+}
+
+.restock-orders-table .col-items {
+  width: 240px;
+}
+
+/* .card already has margin-bottom via App.vue global styles, so the restock
+   card and All Orders card below it don't need extra spacing here. */
+
+.card-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: #64748b;
 }
 
 /* Items details styling */
