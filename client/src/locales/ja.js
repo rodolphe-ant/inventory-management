@@ -411,7 +411,6 @@ export default {
     'Electric Motor 5HP': '電動モーター 5HP',
     'Oil Filter Cartridge': 'オイルフィルターカートリッジ',
     'Pressure Relief Valve': '圧力リリーフバルブ',
-    'Temperature Sensor Module': '温度センサーモジュール',
     'Logic Controller Board': 'ロジックコントローラ基板'
   },
 
